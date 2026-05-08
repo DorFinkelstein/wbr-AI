@@ -1,11 +1,12 @@
 """
-Two interchangeable judges for WBR:
+Three interchangeable judges for WBR:
 
   RealWBRClient   – hits the live whatbeatsrock.com API
-  ClaudeJudge     – uses Claude to simulate the WBR narrator (for offline
-                    pre-training or when the real site is unavailable)
+  GeminiJudge     – uses Gemini (free tier) to simulate the narrator
+  ClaudeJudge     – uses Claude to simulate the narrator
 
-Both expose the same interface:
+All offline judges expose the same interface:
+    reset()
     judge(item1: str, item2: str) -> JudgeResult
 """
 
@@ -75,7 +76,7 @@ class RealWBRClient:
         return JudgeResult(item1=item1, item2=item2, item2wins=wins, reason=reason)
 
 
-# ── Claude judge (offline / pre-training) ─────────────────────────────────────
+# ── Shared prompt ─────────────────────────────────────────────────────────────
 
 _JUDGE_SYSTEM = """\
 You are the narrator and judge for the game "What Beats Rock?".
@@ -90,14 +91,76 @@ Rules:
   {"wins": true_or_false, "reason": "one short sentence"}
 """
 
-_JUDGE_USER = "Does \"{item2}\" beat \"{item1}\"?"
+_JUDGE_USER = 'Does "{item2}" beat "{item1}"?'
 
 
-class ClaudeJudge:
-    """Mimics the WBR narrator using Claude.  Requires ANTHROPIC_API_KEY."""
+def _parse_json_response(raw: str) -> dict:
+    raw = raw.strip()
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+    return json.loads(raw.strip())
+
+
+# ── Gemini judge (free tier) ───────────────────────────────────────────────────
+
+class GeminiJudge:
+    """
+    Mimics the WBR narrator using Google Gemini.
+
+    Free tier: https://aistudio.google.com/apikey
+    Requires GEMINI_API_KEY env var.
+    """
 
     def reset(self) -> None:
-        pass  # no session state needed for Claude
+        pass
+
+    def __init__(self, cfg):
+        try:
+            from google import generativeai as genai
+        except ImportError as e:
+            raise ImportError("pip install google-generativeai") from e
+
+        self.cfg = cfg
+        genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+        self.model = genai.GenerativeModel(
+            model_name=cfg.gemini_model,
+            system_instruction=_JUDGE_SYSTEM,
+            generation_config={"temperature": cfg.judge_temperature, "max_output_tokens": 128},
+        )
+        self._cache: dict[tuple, JudgeResult] = {}
+
+    def judge(self, item1: str, item2: str) -> JudgeResult:
+        key = (item1.lower(), item2.lower())
+        if key in self._cache:
+            return self._cache[key]
+
+        response = self.model.generate_content(
+            _JUDGE_USER.format(item1=item1, item2=item2)
+        )
+        data = _parse_json_response(response.text)
+        result = JudgeResult(
+            item1=item1,
+            item2=item2,
+            item2wins=bool(data["wins"]),
+            reason=data.get("reason", ""),
+        )
+        self._cache[key] = result
+        return result
+
+
+# ── Claude judge ───────────────────────────────────────────────────────────────
+
+class ClaudeJudge:
+    """
+    Mimics the WBR narrator using Claude.
+
+    Requires ANTHROPIC_API_KEY env var.
+    """
+
+    def reset(self) -> None:
+        pass
 
     def __init__(self, cfg):
         try:
@@ -117,21 +180,13 @@ class ClaudeJudge:
         msg = self.client.messages.create(
             model=self.cfg.claude_model,
             max_tokens=128,
-            temperature=self.cfg.claude_judge_temperature,
+            temperature=self.cfg.judge_temperature,
             system=_JUDGE_SYSTEM,
-            messages=[
-                {"role": "user", "content": _JUDGE_USER.format(
-                    item1=item1, item2=item2
-                )}
-            ],
+            messages=[{"role": "user", "content": _JUDGE_USER.format(
+                item1=item1, item2=item2
+            )}],
         )
-        raw = msg.content[0].text.strip()
-        # Strip markdown fences if present
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        data = json.loads(raw)
+        data = _parse_json_response(msg.content[0].text)
         result = JudgeResult(
             item1=item1,
             item2=item2,
@@ -142,7 +197,13 @@ class ClaudeJudge:
         return result
 
 
-def make_judge(cfg) -> "RealWBRClient | ClaudeJudge":
-    if cfg.use_claude_judge:
+# ── Factory ────────────────────────────────────────────────────────────────────
+
+def make_judge(cfg):
+    if not cfg.judge_backend or cfg.judge_backend == "real":
+        return RealWBRClient(cfg)
+    if cfg.judge_backend == "gemini":
+        return GeminiJudge(cfg)
+    if cfg.judge_backend == "claude":
         return ClaudeJudge(cfg)
-    return RealWBRClient(cfg)
+    raise ValueError(f"Unknown judge_backend: {cfg.judge_backend!r}. Choose gemini, claude, or real.")

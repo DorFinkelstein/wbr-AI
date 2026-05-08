@@ -176,13 +176,15 @@ def main() -> None:
     kb = KnowledgeBase(cfg.db_path, cfg.replay_buffer_size)
     vocab = load_vocabulary(cfg.vocab_path)
 
-    # ── Offline phase uses Claude judge ───────────────────────────────────────
+    # ── Offline phase uses Gemini (or Claude) as judge ────────────────────────
     if args.phase in ("offline", "both"):
-        if not os.environ.get("ANTHROPIC_API_KEY"):
-            print("ERROR: ANTHROPIC_API_KEY not set. Required for offline phase.")
+        key_var = "GEMINI_API_KEY" if cfg.judge_backend == "gemini" else "ANTHROPIC_API_KEY"
+        if not os.environ.get(key_var):
+            print(f"ERROR: {key_var} not set. Required for offline phase.")
+            if cfg.judge_backend == "gemini":
+                print("  Get a free key at https://aistudio.google.com/apikey")
             return
 
-        cfg.use_claude_judge = True
         env = WhatBeatsRockEnv(cfg, kb, vocab=list(vocab))
         agent = WBRAgent(cfg, env.vocab, kb)
 
@@ -190,12 +192,12 @@ def main() -> None:
             print(f"Loading existing weights from {cfg.model_path}")
             agent.load(cfg.model_path)
 
-        train_phase(cfg, agent, env, cfg.offline_episodes, "Offline (Claude judge)")
+        train_phase(cfg, agent, env, cfg.offline_episodes, f"Offline ({cfg.judge_backend} judge)")
         vocab = env.vocab  # vocab may have grown
 
     # ── Online phase uses real WBR API ────────────────────────────────────────
     if args.phase in ("online", "both"):
-        cfg.use_claude_judge = False
+        cfg.judge_backend = "real"
         cfg.epsilon_start = 0.3   # lower epsilon for fine-tuning
         env = WhatBeatsRockEnv(cfg, kb, vocab=list(vocab))
         agent = WBRAgent(cfg, env.vocab, kb)
@@ -213,7 +215,6 @@ def main() -> None:
     # ── Optional demo play ────────────────────────────────────────────────────
     if args.play:
         if "agent" not in dir():  # loaded but not trained in this run
-            cfg.use_claude_judge = True
             env = WhatBeatsRockEnv(cfg, kb, vocab=list(vocab))
             agent = WBRAgent(cfg, env.vocab, kb)
             if os.path.exists(cfg.model_path):

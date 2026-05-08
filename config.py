@@ -15,12 +15,16 @@ class Config:
     api_field_wins: str = "guess_wins"
     request_delay: float = 1.5          # seconds between API calls (be polite)
 
-    # ── Offline judge (Claude) ────────────────────────────────────────────────
-    # Used for pre-training before hitting the real API.
-    # Requires ANTHROPIC_API_KEY env var.
-    use_claude_judge: bool = True
+    # ── Offline judge ─────────────────────────────────────────────────────────
+    # Which LLM to use as the judge during offline pre-training.
+    # Options: "gemini" (free tier), "claude" (requires paid API key)
+    judge_backend: str = "gemini"
+    judge_temperature: float = 0.2
+    # Gemini — get a free key at https://aistudio.google.com/apikey
+    # Requires GEMINI_API_KEY env var.
+    gemini_model: str = "gemini-2.0-flash"
+    # Claude — requires ANTHROPIC_API_KEY env var.
     claude_model: str = "claude-sonnet-4-6"
-    claude_judge_temperature: float = 0.2
 
     # ── Embeddings ────────────────────────────────────────────────────────────
     embedding_model: str = "all-MiniLM-L6-v2"  # 384-dim, fast, good quality
@@ -38,7 +42,7 @@ class Config:
     target_update_freq: int = 50  # steps between copying online→target network
 
     # ── Training ──────────────────────────────────────────────────────────────
-    offline_episodes: int = 300    # pre-train with Claude judge
+    offline_episodes: int = 300    # pre-train with offline judge (Gemini/Claude)
     online_episodes: int = 200     # fine-tune on real game API
     max_chain_length: int = 100    # safety cap per episode
     save_freq: int = 25            # save checkpoint every N episodes

@@ -80,7 +80,7 @@ class WhatBeatsRockEnv(gym.Env):
             result = self.judge.judge(item1, guess)
             wins = result.item2wins
             reason = result.reason
-            source = "claude" if self.cfg.use_claude_judge else "real_api"
+            source = self.cfg.judge_backend
             self.kb.record_outcome(item1, guess, wins, reason, source)
 
             if wins and self.cfg.auto_expand_vocab and guess not in self.vocab:

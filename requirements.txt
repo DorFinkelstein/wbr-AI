@@ -1,7 +1,9 @@
-anthropic>=0.40.0
+google-generativeai>=0.8.0
 gymnasium>=0.29.0
 torch>=2.2.0
 sentence-transformers>=3.0.0
 numpy>=1.26.0
 requests>=2.31.0
 tqdm>=4.66.0
+# Optional: only needed if using Claude as judge instead of Gemini
+# anthropic>=0.40.0
