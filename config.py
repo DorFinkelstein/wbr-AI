@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 class Config:
     # ── WBR API ──────────────────────────────────────────────────────────────
     api_base_url: str = "https://whatbeatsrock.com"
-    api_path: str = "/api/wbr"          # verify path in DevTools if it changes
+    api_path: str = "/api/vs"          # verify path in DevTools if it changes
     # Request body fields
     api_field_prev: str = "prev"         # current item to beat
     api_field_guess: str = "guess"       # our proposed item
