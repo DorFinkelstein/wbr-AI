@@ -4,19 +4,16 @@ from dataclasses import dataclass, field
 @dataclass
 class Config:
     # ── WBR API ──────────────────────────────────────────────────────────────
-    # Find the real endpoint by opening whatbeatsrock.com in Chrome/Firefox,
-    # opening DevTools → Network tab, playing one round, and copying the
-    # POST request URL + body format.  Common patterns:
-    #   POST /api/wbr          body: {"item1": "rock", "item2": "paper"}
-    #   POST /api/guess        body: {"current": "rock", "guess": "paper"}
     api_base_url: str = "https://whatbeatsrock.com"
-    api_path: str = "/api/wbr"
-    # Field names in the request body (update after checking DevTools)
-    api_field_item1: str = "item1"
-    api_field_item2: str = "item2"
-    # Field in the response that says whether item2 won
-    api_field_wins: str = "item2wins"
-    request_delay: float = 1.5  # seconds between API calls (be polite)
+    api_path: str = "/api/wbr"          # verify path in DevTools if it changes
+    # Request body fields
+    api_field_prev: str = "prev"         # current item to beat
+    api_field_guess: str = "guess"       # our proposed item
+    api_field_gid: str = "gid"           # game session UUID (client-generated)
+    # Response: wins flag lives at response["data"]["guess_wins"]
+    api_response_data_key: str = "data"
+    api_field_wins: str = "guess_wins"
+    request_delay: float = 1.5          # seconds between API calls (be polite)
 
     # ── Offline judge (Claude) ────────────────────────────────────────────────
     # Used for pre-training before hitting the real API.

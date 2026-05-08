@@ -58,6 +58,7 @@ class WhatBeatsRockEnv(gym.Env):
         options: Optional[Dict] = None,
     ) -> Tuple[int, Dict]:
         super().reset(seed=seed)
+        self.judge.reset()  # new gid for real client; noop for Claude
         self._current_item = "rock"
         self._current_idx = self._ensure_idx("rock")
         self._chain_length = 0

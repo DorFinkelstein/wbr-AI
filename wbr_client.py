@@ -12,6 +12,7 @@ Both expose the same interface:
 import json
 import os
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Optional
 
@@ -29,15 +30,7 @@ class JudgeResult:
 # ── Real game client ───────────────────────────────────────────────────────────
 
 class RealWBRClient:
-    """
-    Sends guesses to the live whatbeatsrock.com API.
-
-    Before using this you MUST confirm the endpoint + body format by:
-      1. Open https://whatbeatsrock.com in Chrome/Firefox
-      2. DevTools → Network tab → play one round
-      3. Find the POST request, copy URL path and JSON body keys
-      4. Update Config.api_path / api_field_* accordingly
-    """
+    """Sends guesses to the live whatbeatsrock.com API."""
 
     def __init__(self, cfg):
         self.cfg = cfg
@@ -51,6 +44,11 @@ class RealWBRClient:
             "Referer": cfg.api_base_url,
         })
         self._last_call = 0.0
+        self._gid: str = str(uuid.uuid4())
+
+    def reset(self) -> None:
+        """Call at the start of each new game to get a fresh session UUID."""
+        self._gid = str(uuid.uuid4())
 
     def judge(self, item1: str, item2: str) -> JudgeResult:
         # Rate-limit
@@ -61,16 +59,19 @@ class RealWBRClient:
 
         url = self.cfg.api_base_url.rstrip("/") + self.cfg.api_path
         body = {
-            self.cfg.api_field_item1: item1,
-            self.cfg.api_field_item2: item2,
+            self.cfg.api_field_prev: item1,
+            self.cfg.api_field_guess: item2,
+            self.cfg.api_field_gid: self._gid,
         }
 
         resp = self.session.post(url, json=body, timeout=15)
         resp.raise_for_status()
-        data = resp.json()
+        payload = resp.json()
 
+        # Response is nested: {"data": {"guess_wins": ..., "reason": ...}}
+        data = payload.get(self.cfg.api_response_data_key, payload)
         wins = bool(data.get(self.cfg.api_field_wins, False))
-        reason = data.get("reason", data.get("message", ""))
+        reason = data.get("reason", "")
         return JudgeResult(item1=item1, item2=item2, item2wins=wins, reason=reason)
 
 
@@ -94,6 +95,9 @@ _JUDGE_USER = "Does \"{item2}\" beat \"{item1}\"?"
 
 class ClaudeJudge:
     """Mimics the WBR narrator using Claude.  Requires ANTHROPIC_API_KEY."""
+
+    def reset(self) -> None:
+        pass  # no session state needed for Claude
 
     def __init__(self, cfg):
         try:
