@@ -202,12 +202,16 @@ def main() -> None:
         env = WhatBeatsRockEnv(cfg, kb, vocab=list(vocab))
         agent = WBRAgent(cfg, env.vocab, kb)
 
-        if os.path.exists(cfg.model_path):
-            print(f"Loading existing weights from {cfg.model_path}")
-            agent.load(cfg.model_path)
+        abs_model = os.path.abspath(cfg.model_path)
+        if os.path.exists(abs_model):
+            print(f"Loading existing weights from {abs_model}")
+            agent.load(abs_model)
             agent.epsilon = cfg.epsilon_start  # reset for fine-tuning
         else:
-            print("WARNING: No pre-trained model found. Running online from scratch.")
+            print(f"WARNING: No pre-trained model found at {abs_model}")
+            print("  Run offline training first:  python train.py --phase offline")
+            print("  Or train both phases at once: python train.py --phase both")
+            return
 
         train_phase(cfg, agent, env, cfg.online_episodes, "Online (real WBR API)")
         vocab = env.vocab

@@ -66,6 +66,14 @@ class RealWBRClient:
         }
 
         resp = self.session.post(url, json=body, timeout=15)
+        if resp.status_code == 404:
+            raise RuntimeError(
+                f"\n\n  404 Not Found: {url}\n"
+                "  The API path in config.py is wrong.\n"
+                "  Fix: open whatbeatsrock.com in Chrome → F12 → Network tab →\n"
+                "  play one round → click the POST request → copy the path from\n"
+                "  the Headers tab → update api_path in config.py.\n"
+            )
         resp.raise_for_status()
         payload = resp.json()
 
