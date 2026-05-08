@@ -117,7 +117,8 @@ class GeminiJudge:
     """
     Mimics the WBR narrator using Google Gemini.
 
-    Free tier: https://aistudio.google.com/apikey
+    Free tier (gemini-1.5-flash): 15 RPM, 1 500 RPD, 1M TPD
+    Get a key at https://aistudio.google.com/apikey
     Requires GEMINI_API_KEY env var.
     """
 
@@ -138,15 +139,44 @@ class GeminiJudge:
             generation_config={"temperature": cfg.judge_temperature, "max_output_tokens": 128},
         )
         self._cache: dict[tuple, JudgeResult] = {}
+        # Rate limiter: track time of last call to stay under RPM limit
+        self._min_interval = 60.0 / cfg.gemini_rpm_limit  # seconds between calls
+        self._last_call = 0.0
 
     def judge(self, item1: str, item2: str) -> JudgeResult:
         key = (item1.lower(), item2.lower())
         if key in self._cache:
             return self._cache[key]
 
-        response = self.model.generate_content(
-            _JUDGE_USER.format(item1=item1, item2=item2)
-        )
+        # Enforce rate limit
+        wait = self._min_interval - (time.time() - self._last_call)
+        if wait > 0:
+            time.sleep(wait)
+
+        # Retry with backoff on 429 quota errors
+        for attempt in range(6):
+            try:
+                self._last_call = time.time()
+                response = self.model.generate_content(
+                    _JUDGE_USER.format(item1=item1, item2=item2)
+                )
+                break
+            except Exception as e:
+                if "429" in str(e) or "ResourceExhausted" in type(e).__name__:
+                    wait_s = 2 ** attempt * 10  # 10s, 20s, 40s, 80s, 160s, 320s
+                    print(f"\n  [Gemini] Rate limited. Waiting {wait_s}s (attempt {attempt+1}/6)...")
+                    time.sleep(wait_s)
+                    if attempt == 5:
+                        raise RuntimeError(
+                            "Gemini quota exhausted after 6 retries.\n"
+                            "  Options:\n"
+                            "  1. Wait until tomorrow (daily limit resets at midnight Pacific)\n"
+                            "  2. Switch to a different model in config.py (try gemini-1.5-flash-8b)\n"
+                            "  3. Add billing to your Google account for higher limits\n"
+                        ) from e
+                else:
+                    raise
+
         data = _parse_json_response(response.text)
         result = JudgeResult(
             item1=item1,

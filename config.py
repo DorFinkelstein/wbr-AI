@@ -22,7 +22,8 @@ class Config:
     judge_temperature: float = 0.2
     # Gemini — get a free key at https://aistudio.google.com/apikey
     # Requires GEMINI_API_KEY env var.
-    gemini_model: str = "gemini-2.0-flash"
+    gemini_model: str = "gemini-1.5-flash"   # larger free-tier quota than 2.0-flash
+    gemini_rpm_limit: int = 14              # free tier is 15 RPM; stay just under
     # Claude — requires ANTHROPIC_API_KEY env var.
     claude_model: str = "claude-sonnet-4-6"
 
